@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -10,96 +10,115 @@ import {
   Trash2,
   ListTodo,
   Play,
-  Check
+  Check,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { TaskModal } from '@/components/TaskModal';
 import { cn } from '@/lib/utils';
-
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: 'todo' | 'ongoing' | 'completed';
-  deadline: string;
-  createdAt: string;
-}
-
-// Demo data
-const initialTasks: Task[] = [
-  { id: '1', title: 'Review Q4 financial reports', description: 'Analyze revenue and expenses', status: 'todo', deadline: '2025-01-05', createdAt: '2025-01-01' },
-  { id: '2', title: 'Update project documentation', description: 'Add new API endpoints to docs', status: 'ongoing', deadline: '2025-01-03', createdAt: '2024-12-28' },
-  { id: '3', title: 'Client meeting preparation', description: 'Prepare slides and talking points', status: 'completed', deadline: '2024-12-30', createdAt: '2024-12-25' },
-  { id: '4', title: 'Deploy new features', description: 'Push v2.0 to production', status: 'todo', deadline: '2025-01-10', createdAt: '2024-12-20' },
-  { id: '5', title: 'Security audit', description: 'Review authentication flows', status: 'ongoing', deadline: '2025-01-08', createdAt: '2024-12-15' },
-  { id: '6', title: 'Team standup notes', status: 'completed', deadline: '2024-12-28', createdAt: '2024-12-27' },
-];
+import { taskService, Task, TaskSummary, TaskFormData } from '@/lib/task.service';
+import { getErrorMessage } from '@/lib/api';
 
 type StatusFilter = 'all' | 'todo' | 'ongoing' | 'completed';
 
 export default function TasksDashboard() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [summary, setSummary] = useState<TaskSummary | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  const calculateSummary = () => {
-    const now = new Date();
-    const pending = tasks.filter(t => t.status !== 'completed').length;
-    const completed = tasks.filter(t => t.status === 'completed').length;
-    const overdue = tasks.filter(t => {
-      if (t.status === 'completed') return false;
-      return new Date(t.deadline) < now;
-    }).length;
-    const ongoing = tasks.filter(t => t.status === 'ongoing').length;
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [tasksRes, summaryRes] = await Promise.all([
+        taskService.getAll({ status: filter, limit: 50 }),
+        taskService.getSummary(),
+      ]);
+      setTasks(tasksRes.tasks);
+      setSummary(summaryRes);
+    } catch (error) {
+      toast({
+        title: "Error loading tasks",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filter, toast]);
 
-    return { pending, completed, overdue, ongoing };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleAddTask = async (data: TaskFormData) => {
+    setIsSaving(true);
+    try {
+      await taskService.create(data);
+      toast({
+        title: "Task created",
+        description: `"${data.title}" has been added.`,
+      });
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const summary = calculateSummary();
-
-  const filteredTasks = filter === 'all' 
-    ? tasks 
-    : tasks.filter(t => t.status === filter);
-
-  const handleAddTask = (data: Omit<Task, 'id' | 'createdAt'>) => {
-    const newTask: Task = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setTasks([newTask, ...tasks]);
-    toast({
-      title: "Task created",
-      description: `"${data.title}" has been added.`,
-    });
-    setIsModalOpen(false);
-  };
-
-  const handleEditTask = (data: Omit<Task, 'id' | 'createdAt'>) => {
+  const handleEditTask = async (data: TaskFormData) => {
     if (!editingTask) return;
-    setTasks(tasks.map(t => 
-      t.id === editingTask.id ? { ...t, ...data } : t
-    ));
-    toast({
-      title: "Task updated",
-      description: "Your task has been updated.",
-    });
-    setEditingTask(null);
-    setIsModalOpen(false);
+    setIsSaving(true);
+    try {
+      await taskService.update(editingTask.id, data);
+      toast({
+        title: "Task updated",
+        description: "Your task has been updated.",
+      });
+      setEditingTask(null);
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
-    toast({
-      title: "Task deleted",
-      description: "The task has been removed.",
-    });
+  const handleDeleteTask = async (id: string) => {
+    try {
+      await taskService.delete(id);
+      toast({
+        title: "Task deleted",
+        description: "The task has been removed.",
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleStatusChange = (id: string, newStatus: Task['status']) => {
+  const handleStatusChange = async (id: string, newStatus: Task['status']) => {
     const task = tasks.find(t => t.id === id);
     if (task?.status === 'completed') {
       toast({
@@ -109,11 +128,20 @@ export default function TasksDashboard() {
       });
       return;
     }
-    setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
-    toast({
-      title: "Status updated",
-      description: `Task marked as ${newStatus}.`,
-    });
+    try {
+      await taskService.updateStatus(id, newStatus);
+      toast({
+        title: "Status updated",
+        description: `Task marked as ${newStatus}.`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    }
   };
 
   const openEditModal = (task: Task) => {
@@ -134,11 +162,6 @@ export default function TasksDashboard() {
     setIsModalOpen(true);
   };
 
-  const isOverdue = (task: Task) => {
-    if (task.status === 'completed') return false;
-    return new Date(task.deadline) < new Date();
-  };
-
   const getStatusIcon = (status: Task['status']) => {
     switch (status) {
       case 'todo': return ListTodo;
@@ -155,6 +178,14 @@ export default function TasksDashboard() {
       case 'completed': return 'text-money bg-money/20';
     }
   };
+
+  if (isLoading && !tasks.length) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-tasks" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -186,7 +217,7 @@ export default function TasksDashboard() {
             <span className="text-muted-foreground text-sm font-medium">Pending</span>
             <Clock className="w-5 h-5 text-tasks" />
           </div>
-          <p className="text-3xl font-bold">{summary.pending}</p>
+          <p className="text-3xl font-bold">{summary?.pending ?? 0}</p>
           <p className="text-muted-foreground text-sm mt-1">Tasks to complete</p>
         </motion.div>
 
@@ -200,7 +231,7 @@ export default function TasksDashboard() {
             <span className="text-muted-foreground text-sm font-medium">In Progress</span>
             <Play className="w-5 h-5 text-tasks" />
           </div>
-          <p className="text-3xl font-bold text-tasks">{summary.ongoing}</p>
+          <p className="text-3xl font-bold text-tasks">{summary?.ongoing ?? 0}</p>
           <p className="text-muted-foreground text-sm mt-1">Currently working on</p>
         </motion.div>
 
@@ -214,7 +245,7 @@ export default function TasksDashboard() {
             <span className="text-muted-foreground text-sm font-medium">Completed</span>
             <CheckCircle2 className="w-5 h-5 text-money" />
           </div>
-          <p className="text-3xl font-bold text-money">{summary.completed}</p>
+          <p className="text-3xl font-bold text-money">{summary?.completed ?? 0}</p>
           <p className="text-muted-foreground text-sm mt-1">Successfully done</p>
         </motion.div>
 
@@ -228,7 +259,7 @@ export default function TasksDashboard() {
             <span className="text-muted-foreground text-sm font-medium">Overdue</span>
             <AlertCircle className="w-5 h-5 text-destructive" />
           </div>
-          <p className="text-3xl font-bold text-destructive">{summary.overdue}</p>
+          <p className="text-3xl font-bold text-destructive">{summary?.overdue ?? 0}</p>
           <p className="text-muted-foreground text-sm mt-1">Need attention</p>
         </motion.div>
       </div>
@@ -238,22 +269,33 @@ export default function TasksDashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="flex gap-2 p-1 bg-muted/50 rounded-xl w-fit"
+        className="flex flex-wrap items-center gap-4"
       >
-        {(['all', 'todo', 'ongoing', 'completed'] as StatusFilter[]).map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-              filter === status
-                ? "bg-tasks text-primary-foreground shadow-lg"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </button>
-        ))}
+        <div className="flex gap-2 p-1 bg-muted/50 rounded-xl">
+          {(['all', 'todo', 'ongoing', 'completed'] as StatusFilter[]).map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                filter === status
+                  ? "bg-tasks text-primary-foreground shadow-lg"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </button>
+          ))}
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={fetchData}
+          disabled={isLoading}
+        >
+          <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+          Refresh
+        </Button>
       </motion.div>
 
       {/* Tasks List */}
@@ -264,9 +306,9 @@ export default function TasksDashboard() {
         className="space-y-3"
       >
         <AnimatePresence>
-          {filteredTasks.map((task, index) => {
+          {tasks.map((task, index) => {
             const StatusIcon = getStatusIcon(task.status);
-            const overdue = isOverdue(task);
+            const overdue = task.isOverdue;
 
             return (
               <motion.div
@@ -352,7 +394,7 @@ export default function TasksDashboard() {
           })}
         </AnimatePresence>
 
-        {filteredTasks.length === 0 && (
+        {tasks.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <ListTodo className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>No tasks found. Create your first task!</p>
@@ -369,6 +411,7 @@ export default function TasksDashboard() {
         }}
         onSubmit={editingTask ? handleEditTask : handleAddTask}
         task={editingTask}
+        isLoading={isSaving}
       />
     </div>
   );

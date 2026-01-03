@@ -3,16 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, DollarSign, Calendar, FileText, Tag, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, DollarSign, Calendar, FileText, Tag, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { Transaction } from '@/pages/MoneyDashboard';
+import type { Transaction, Category, TransactionFormData } from '@/lib/transaction.service';
 
 const transactionSchema = z.object({
   amount: z.number().positive('Amount must be greater than 0'),
   type: z.enum(['income', 'expense']),
-  category: z.string().min(1, 'Category is required').max(50, 'Category must be less than 50 characters'),
+  categoryId: z.string().min(1, 'Category is required'),
   description: z.string().min(1, 'Description is required').max(255, 'Description must be less than 255 characters'),
   date: z.string().refine((date) => {
     const d = new Date(date);
@@ -20,18 +20,19 @@ const transactionSchema = z.object({
   }, 'Date cannot be in the future'),
 });
 
-type TransactionFormData = z.infer<typeof transactionSchema>;
+type FormData = z.infer<typeof transactionSchema>;
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Transaction, 'id'>) => void;
+  onSubmit: (data: TransactionFormData) => void;
   transaction?: Transaction | null;
-  categories: string[];
+  categories: Category[];
+  isLoading?: boolean;
 }
 
-export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categories }: TransactionModalProps) {
-  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<TransactionFormData>({
+export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categories, isLoading }: TransactionModalProps) {
+  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormData>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
       type: 'expense',
@@ -46,7 +47,7 @@ export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categ
       reset({
         amount: transaction.amount,
         type: transaction.type,
-        category: transaction.category,
+        categoryId: transaction.categoryId,
         description: transaction.description,
         date: transaction.date,
       });
@@ -54,22 +55,21 @@ export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categ
       reset({
         amount: undefined,
         type: 'expense',
-        category: '',
+        categoryId: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
       });
     }
   }, [transaction, reset]);
 
-  const handleFormSubmit = (data: TransactionFormData) => {
+  const handleFormSubmit = (data: FormData) => {
     onSubmit({
       amount: data.amount,
       type: data.type,
-      category: data.category,
+      categoryId: data.categoryId,
       description: data.description,
       date: data.date,
     });
-    reset();
   };
 
   return (
@@ -162,16 +162,16 @@ export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categ
                     <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <select
                       className="w-full h-12 pl-10 pr-4 bg-input border border-border rounded-lg appearance-none cursor-pointer focus:ring-2 focus:ring-money/20 focus:border-money"
-                      {...register('category')}
+                      {...register('categoryId')}
                     >
                       <option value="">Select category</option>
                       {categories.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
                     </select>
                   </div>
-                  {errors.category && (
-                    <p className="text-sm text-destructive">{errors.category.message}</p>
+                  {errors.categoryId && (
+                    <p className="text-sm text-destructive">{errors.categoryId.message}</p>
                   )}
                 </div>
 
@@ -215,17 +215,23 @@ export function TransactionModal({ isOpen, onClose, onSubmit, transaction, categ
                     variant="outline"
                     onClick={onClose}
                     className="flex-1 h-12"
+                    disabled={isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
+                    disabled={isLoading}
                     className={cn(
                       "flex-1 h-12 text-primary-foreground",
                       selectedType === 'income' ? "bg-gradient-money" : "bg-destructive hover:bg-destructive/90"
                     )}
                   >
-                    {transaction ? 'Update' : 'Add'} Transaction
+                    {isLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>{transaction ? 'Update' : 'Add'} Transaction</>
+                    )}
                   </Button>
                 </div>
               </form>

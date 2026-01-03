@@ -53,8 +53,8 @@ export default function Signup() {
   const onSubmit = async (data: SignupFormData) => {
     setIsLoading(true);
     try {
-      const success = await signup(data.name, data.email, data.password);
-      if (success) {
+      const result = await signup({ name: data.name, email: data.email, password: data.password });
+      if (result.success) {
         toast({
           title: "Account created!",
           description: "Welcome to SecureHub. Let's get started!",
@@ -63,11 +63,11 @@ export default function Signup() {
       } else {
         toast({
           title: "Signup failed",
-          description: "Could not create account. Please try again.",
+          description: result.error || "Could not create account. Please try again.",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Something went wrong. Please try again.",

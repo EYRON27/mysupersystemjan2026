@@ -1,69 +1,97 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-}
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { authService, User, LoginCredentials, SignupData } from '@/lib/auth.service';
+import { tokenManager } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  signup: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  isLoading: boolean;
+  login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
+  signup: (data: SignupData) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('dashboard_user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API call - in production, this would call your backend
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Demo login - accepts any valid email/password combination
-    if (email && password.length >= 8) {
-      const newUser = {
-        id: crypto.randomUUID(),
-        email,
-        name: email.split('@')[0],
-      };
-      setUser(newUser);
-      localStorage.setItem('dashboard_user', JSON.stringify(newUser));
-      return true;
+  // Check if user is already authenticated on mount
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = tokenManager.getAccessToken();
+      if (token) {
+        try {
+          const userData = await authService.getMe();
+          setUser(userData);
+        } catch {
+          // Token invalid, clear it
+          tokenManager.clearTokens();
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initAuth();
+  }, []);
+
+  const login = useCallback(async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { user: userData } = await authService.login(credentials);
+      setUser(userData);
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Login failed';
+      // Extract server error message if available
+      const serverMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      return { success: false, error: serverMessage || message };
     }
-    return false;
-  };
+  }, []);
 
-  const signup = async (name: string, email: string, password: string): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    if (name && email && password.length >= 8) {
-      const newUser = {
-        id: crypto.randomUUID(),
-        email,
-        name,
-      };
-      setUser(newUser);
-      localStorage.setItem('dashboard_user', JSON.stringify(newUser));
-      return true;
+  const signup = useCallback(async (data: SignupData): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { user: userData } = await authService.signup(data);
+      setUser(userData);
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Signup failed';
+      const serverMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      return { success: false, error: serverMessage || message };
     }
-    return false;
-  };
+  }, []);
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('dashboard_user');
-  };
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout();
+    } finally {
+      setUser(null);
+    }
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const userData = await authService.getMe();
+      setUser(userData);
+    } catch {
+      setUser(null);
+      tokenManager.clearTokens();
+    }
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        signup,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

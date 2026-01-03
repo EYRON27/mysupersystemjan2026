@@ -3,28 +3,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Globe, User, Lock, Tag, FileText, Eye, EyeOff, Check } from 'lucide-react';
+import { X, Globe, User, Lock, Tag, FileText, Eye, EyeOff, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { PasswordEntry } from '@/pages/VaultDashboard';
+import type { VaultEntry, VaultCategory, VaultFormData } from '@/lib/vault.service';
 
 const passwordSchema = z.object({
   website: z.string().min(1, 'Website is required').max(100, 'Website must be less than 100 characters'),
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  category: z.string().min(1, 'Category is required'),
+  categoryId: z.string().optional(),
   notes: z.string().max(500, 'Notes must be less than 500 characters').optional(),
 });
 
-type PasswordFormData = z.infer<typeof passwordSchema>;
+type PasswordFormDataLocal = z.infer<typeof passwordSchema>;
 
 interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<PasswordEntry, 'id' | 'createdAt'>) => void;
-  password?: PasswordEntry | null;
-  categories: string[];
+  onSubmit: (data: VaultFormData) => void;
+  password?: VaultEntry | null;
+  categories: VaultCategory[];
+  isLoading?: boolean;
 }
 
 const passwordStrength = (password: string) => {
@@ -37,10 +38,10 @@ const passwordStrength = (password: string) => {
   return score;
 };
 
-export function PasswordModal({ isOpen, onClose, onSubmit, password, categories }: PasswordModalProps) {
+export function PasswordModal({ isOpen, onClose, onSubmit, password, categories, isLoading = false }: PasswordModalProps) {
   const [showPassword, setShowPassword] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<PasswordFormData>({
+  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<PasswordFormDataLocal>({
     resolver: zodResolver(passwordSchema),
   });
 
@@ -52,8 +53,8 @@ export function PasswordModal({ isOpen, onClose, onSubmit, password, categories 
       reset({
         website: password.website,
         username: password.username,
-        password: password.password,
-        category: password.category,
+        password: '', // Don't prefill password for security
+        categoryId: password.categoryId || '',
         notes: password.notes || '',
       });
     } else {
@@ -61,21 +62,20 @@ export function PasswordModal({ isOpen, onClose, onSubmit, password, categories 
         website: '',
         username: '',
         password: '',
-        category: '',
+        categoryId: '',
         notes: '',
       });
     }
   }, [password, reset]);
 
-  const handleFormSubmit = (data: PasswordFormData) => {
+  const handleFormSubmit = (data: PasswordFormDataLocal) => {
     onSubmit({
       website: data.website,
       username: data.username,
       password: data.password,
-      category: data.category,
+      categoryId: data.categoryId || undefined,
       notes: data.notes,
     });
-    reset();
   };
 
   const generatePassword = () => {
@@ -229,16 +229,16 @@ export function PasswordModal({ isOpen, onClose, onSubmit, password, categories 
                     <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <select
                       className="w-full h-12 pl-10 pr-4 bg-input border border-border rounded-lg appearance-none cursor-pointer focus:ring-2 focus:ring-vault/20 focus:border-vault"
-                      {...register('category')}
+                      {...register('categoryId')}
                     >
-                      <option value="">Select category</option>
+                      <option value="">Select category (optional)</option>
                       {categories.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
                     </select>
                   </div>
-                  {errors.category && (
-                    <p className="text-sm text-destructive">{errors.category.message}</p>
+                  {errors.categoryId && (
+                    <p className="text-sm text-destructive">{errors.categoryId.message}</p>
                   )}
                 </div>
 
@@ -265,13 +265,16 @@ export function PasswordModal({ isOpen, onClose, onSubmit, password, categories 
                     variant="outline"
                     onClick={onClose}
                     className="flex-1 h-12"
+                    disabled={isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     className="flex-1 h-12 bg-gradient-vault text-primary-foreground"
+                    disabled={isLoading}
                   >
+                    {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     {password ? 'Update' : 'Save'} Password
                   </Button>
                 </div>

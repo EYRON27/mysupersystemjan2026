@@ -3,31 +3,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, FileText, Calendar, AlignLeft, ListTodo, Play, CheckCircle2 } from 'lucide-react';
+import { X, FileText, Calendar, AlignLeft, ListTodo, Play, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/pages/TasksDashboard';
+import type { Task, TaskFormData } from '@/lib/task.service';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title must be less than 100 characters'),
   description: z.string().max(300, 'Description must be less than 300 characters').optional(),
   status: z.enum(['todo', 'ongoing', 'completed']),
-  deadline: z.string().refine((date) => {
-    const d = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return d >= today;
-  }, 'Deadline cannot be in the past'),
+  deadline: z.string().min(1, 'Deadline is required'),
 });
 
-type TaskFormData = z.infer<typeof taskSchema>;
+type FormData = z.infer<typeof taskSchema>;
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Task, 'id' | 'createdAt'>) => void;
+  onSubmit: (data: TaskFormData) => void;
   task?: Task | null;
+  isLoading?: boolean;
 }
 
 const statusOptions = [
@@ -36,12 +32,12 @@ const statusOptions = [
   { value: 'completed', label: 'Completed', icon: CheckCircle2, colorClass: 'border-money text-money bg-money/10' },
 ] as const;
 
-export function TaskModal({ isOpen, onClose, onSubmit, task }: TaskModalProps) {
+export function TaskModal({ isOpen, onClose, onSubmit, task, isLoading = false }: TaskModalProps) {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDeadline = tomorrow.toISOString().split('T')[0];
 
-  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<TaskFormData>({
+  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: {
       status: 'todo',
@@ -57,7 +53,7 @@ export function TaskModal({ isOpen, onClose, onSubmit, task }: TaskModalProps) {
         title: task.title,
         description: task.description || '',
         status: task.status,
-        deadline: task.deadline,
+        deadline: task.deadline.split('T')[0],
       });
     } else {
       reset({
@@ -69,14 +65,13 @@ export function TaskModal({ isOpen, onClose, onSubmit, task }: TaskModalProps) {
     }
   }, [task, reset, defaultDeadline]);
 
-  const handleFormSubmit = (data: TaskFormData) => {
+  const handleFormSubmit = (data: FormData) => {
     onSubmit({
       title: data.title,
       description: data.description,
       status: data.status,
       deadline: data.deadline,
     });
-    reset();
   };
 
   return (
@@ -196,13 +191,16 @@ export function TaskModal({ isOpen, onClose, onSubmit, task }: TaskModalProps) {
                     variant="outline"
                     onClick={onClose}
                     className="flex-1 h-12"
+                    disabled={isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     className="flex-1 h-12 bg-gradient-tasks text-primary-foreground"
+                    disabled={isLoading}
                   >
+                    {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     {task ? 'Update' : 'Create'} Task
                   </Button>
                 </div>

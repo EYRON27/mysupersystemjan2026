@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, LayoutDashboard } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,8 +31,8 @@ export default function Login() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const success = await login(data.email, data.password);
-      if (success) {
+      const result = await login({ email: data.email, password: data.password });
+      if (result.success) {
         toast({
           title: "Welcome back!",
           description: "You've successfully logged in.",
@@ -41,11 +41,11 @@ export default function Login() {
       } else {
         toast({
           title: "Login failed",
-          description: "Invalid credentials. Please try again.",
+          description: result.error || "Invalid credentials. Please try again.",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Something went wrong. Please try again.",
@@ -62,6 +62,13 @@ export default function Login() {
       <div className="absolute inset-0 bg-gradient-to-br from-money/5 via-transparent to-vault/5" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-money/10 rounded-full blur-3xl animate-pulse-glow" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-vault/10 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '1s' }} />
+
+      <Link to="/" className="absolute top-6 left-6 z-30">
+        <Button className="h-10 px-3 flex items-center gap-2 bg-gradient-money text-primary-foreground rounded-md shadow-md ring-1 ring-white/5 hover:opacity-95">
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Home</span>
+        </Button>
+      </Link>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
