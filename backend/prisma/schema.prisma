@@ -1,12 +1,12 @@
 // Prisma Schema for MySuperSystem
-// Designed for PostgreSQL with Supabase
+// Using SQLite for easy local development (no database server needed)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -67,16 +67,16 @@ model TransactionCategory {
 }
 
 model Transaction {
-  id          String          @id @default(uuid())
-  amount      Decimal         @db.Decimal(12, 2)
-  type        TransactionType
-  description String          @db.VarChar(255)
-  date        DateTime        @db.Date
-  userId      String          @map("user_id")
-  categoryId  String          @map("category_id")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  isDeleted   Boolean         @default(false) @map("is_deleted")
+  id          String   @id @default(uuid())
+  amount      Decimal
+  type        String   // INCOME or EXPENSE
+  description String
+  date        DateTime
+  userId      String   @map("user_id")
+  categoryId  String   @map("category_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
 
   user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   category TransactionCategory @relation(fields: [categoryId], references: [id])
@@ -84,34 +84,23 @@ model Transaction {
   @@map("transactions")
 }
 
-enum TransactionType {
-  INCOME
-  EXPENSE
-}
-
 // ============================================
 // TASK MODELS (Tasks Dashboard)
 // ============================================
 model Task {
-  id          String     @id @default(uuid())
-  title       String     @db.VarChar(100)
-  description String?    @db.VarChar(300)
-  status      TaskStatus @default(TODO)
-  deadline    DateTime   @db.Date
-  userId      String     @map("user_id")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  isDeleted   Boolean    @default(false) @map("is_deleted")
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      String   @default("TODO") // TODO, ONGOING, COMPLETED
+  deadline    DateTime
+  userId      String   @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("tasks")
-}
-
-enum TaskStatus {
-  TODO
-  ONGOING
-  COMPLETED
 }
 
 // ============================================
@@ -133,16 +122,16 @@ model PasswordCategory {
 }
 
 model PasswordVault {
-  id             String   @id @default(uuid())
-  website        String   @db.VarChar(100)
-  username       String
+  id                String   @id @default(uuid())
+  website           String
+  username          String
   encryptedPassword String   @map("encrypted_password") // AES-256 encrypted
-  notes          String?  @db.VarChar(500)
-  userId         String   @map("user_id")
-  categoryId     String   @map("category_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  isDeleted      Boolean  @default(false) @map("is_deleted")
+  notes             String?
+  userId            String   @map("user_id")
+  categoryId        String   @map("category_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  isDeleted         Boolean  @default(false) @map("is_deleted")
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   category PasswordCategory @relation(fields: [categoryId], references: [id])

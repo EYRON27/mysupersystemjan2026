@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/database.js';
 import { ApiError, asyncHandler } from '../middleware/errorHandler.js';
-import { TaskStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+
+// Task status type (SQLite doesn't support enums)
+type TaskStatus = 'TODO' | 'ONGOING' | 'COMPLETED';
 
 /**
  * @desc    Get all tasks for current user

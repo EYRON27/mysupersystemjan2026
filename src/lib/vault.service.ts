@@ -1,6 +1,7 @@
 import { api, ApiResponse } from './api';
 
-export interface PasswordEntry {
+// Export types used in components
+export interface VaultEntry {
   id: string;
   website: string;
   username: string;
@@ -11,19 +12,24 @@ export interface PasswordEntry {
   createdAt: string;
 }
 
-export interface PasswordCategory {
+export interface VaultCategory {
   id: string;
   name: string;
   isDefault: boolean;
 }
 
-export interface PasswordFormData {
+export interface VaultFormData {
   website: string;
   username: string;
   password: string;
-  categoryId: string;
+  categoryId?: string;
   notes?: string;
 }
+
+// Keep backward compatibility with old names
+export type PasswordEntry = VaultEntry;
+export type PasswordCategory = VaultCategory;
+export type PasswordFormData = VaultFormData;
 
 export interface PasswordFilters {
   page?: number;
@@ -35,7 +41,7 @@ export interface PasswordFilters {
 // Password vault service functions
 export const vaultService = {
   async getAll(filters: PasswordFilters = {}): Promise<{
-    passwords: PasswordEntry[];
+    entries: VaultEntry[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
   }> {
     const params = new URLSearchParams();
@@ -45,28 +51,38 @@ export const vaultService = {
     if (filters.search) params.append('search', filters.search);
 
     const response = await api.get(`/vault?${params.toString()}`);
+    // Map backend response (passwords) to frontend naming (entries)
+    return {
+      entries: response.data.data.passwords,
+      pagination: response.data.data.pagination,
+    };
+  },
+
+  async getById(id: string): Promise<VaultEntry> {
+    const response = await api.get<ApiResponse<VaultEntry>>(`/vault/${id}`);
     return response.data.data;
   },
 
-  async getById(id: string): Promise<PasswordEntry> {
-    const response = await api.get<ApiResponse<PasswordEntry>>(`/vault/${id}`);
-    return response.data.data;
-  },
-
-  async revealPassword(id: string, userPassword: string): Promise<string> {
+  async reveal(id: string, userPassword: string): Promise<{ password: string }> {
     const response = await api.post<ApiResponse<{ password: string }>>(`/vault/${id}/reveal`, {
       password: userPassword,
     });
-    return response.data.data.password;
-  },
-
-  async create(data: PasswordFormData): Promise<PasswordEntry> {
-    const response = await api.post<ApiResponse<PasswordEntry>>('/vault', data);
     return response.data.data;
   },
 
-  async update(id: string, data: Partial<PasswordFormData>): Promise<PasswordEntry> {
-    const response = await api.put<ApiResponse<PasswordEntry>>(`/vault/${id}`, data);
+  // Alias for backward compatibility
+  async revealPassword(id: string, userPassword: string): Promise<string> {
+    const result = await this.reveal(id, userPassword);
+    return result.password;
+  },
+
+  async create(data: VaultFormData): Promise<VaultEntry> {
+    const response = await api.post<ApiResponse<VaultEntry>>('/vault', data);
+    return response.data.data;
+  },
+
+  async update(id: string, data: Partial<VaultFormData>): Promise<VaultEntry> {
+    const response = await api.put<ApiResponse<VaultEntry>>(`/vault/${id}`, data);
     return response.data.data;
   },
 
@@ -75,13 +91,13 @@ export const vaultService = {
   },
 
   // Categories
-  async getCategories(): Promise<PasswordCategory[]> {
-    const response = await api.get<ApiResponse<PasswordCategory[]>>('/categories/passwords');
+  async getCategories(): Promise<VaultCategory[]> {
+    const response = await api.get<ApiResponse<VaultCategory[]>>('/categories/passwords');
     return response.data.data;
   },
 
-  async createCategory(name: string): Promise<PasswordCategory> {
-    const response = await api.post<ApiResponse<PasswordCategory>>('/categories', {
+  async createCategory(name: string): Promise<VaultCategory> {
+    const response = await api.post<ApiResponse<VaultCategory>>('/categories', {
       name,
       type: 'password',
     });
